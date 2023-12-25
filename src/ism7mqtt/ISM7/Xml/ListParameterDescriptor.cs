@@ -45,6 +45,9 @@ namespace ism7mqtt.ISM7.Xml
             }
         }
 
+        [XmlIgnore]
+        public IReadOnlyCollection<KeyValuePair<string, string>> LocalizedOptions { get; set; }
+
         private bool? _isBoolean;
         public bool IsBoolean
         {

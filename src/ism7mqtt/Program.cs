@@ -38,6 +38,7 @@ namespace ism7mqtt
             _useSeparateTopics = GetEnvBool("ISM7_SEPARATE");
             _retain = GetEnvBool("ISM7_RETAIN");
             int interval = GetEnvInt32("ISM7_INTERVAL", 60);
+            string language = GetEnvString("ISM7_LANG");
             _discoveryId = GetEnvString("ISM7_HOMEASSISTANT_ID");
             var options = new OptionSet
             {
@@ -53,6 +54,7 @@ namespace ism7mqtt
                 {"retain", "retain mqtt messages", x=> _retain = x != null},
                 {"interval=", "push interval in seconds (defaults to 60)", (int x) => interval = x},
                 {"hass-id=", "HomeAssistant auto-discovery device id/entity prefix (implies --separate and --retain)", x => _discoveryId = x},
+                {"lang=", "parameter localization language", x => language = x},
                 {"d|debug", "dump raw xml messages", x => enableDebug = x != null},
                 {"h|help", "show help", x => showHelp = x != null},
             };
@@ -122,7 +124,7 @@ namespace ism7mqtt
                         await mqttClient.ConnectAsync(mqttOptions, cts.Token);
                         await mqttClient.SubscribeAsync($"Wolf/{ip}/+/set");
                         await mqttClient.SubscribeAsync($"Wolf/{ip}/+/set/#");
-                        var client = new Ism7Client((config, token) => OnMessage(mqttClient, config, enableDebug, token), parameter, IPAddress.Parse(ip))
+                        var client = new Ism7Client((config, token) => OnMessage(mqttClient, config, enableDebug, token), parameter, IPAddress.Parse(ip), language)
                         {
                             Interval = interval,
                             EnableDebug = enableDebug

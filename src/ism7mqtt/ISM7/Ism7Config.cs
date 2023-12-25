@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Xml.Linq;
 using System.Xml.Serialization;
 using ism7mqtt.ISM7.Config;
 using ism7mqtt.ISM7.Protocol;
@@ -22,11 +19,15 @@ namespace ism7mqtt
         private readonly IDictionary<byte, List<RunningDevice>> _devices;
         private readonly ConfigRoot _config;
 
-        public Ism7Config(string filename)
+        public Ism7Config(string filename, string language)
         {
             _deviceTemplates = LoadDeviceTemplates();
             _converterTemplates = LoadConverterTemplates();
             _parameterTemplates = LoadParameterTemplates();
+            if (language != null)
+            {
+                TranslateParameterTemplates(language);
+            }
             if (File.Exists(filename))
             {
                 _config = JsonSerializer.Deserialize<ConfigRoot>(File.ReadAllText(filename));
@@ -61,6 +62,45 @@ namespace ism7mqtt
             {
                 var converter = (ParameterTemplateConfig)serializer.Deserialize(reader);
                 return converter.ParameterList;
+            }
+        }
+
+        private void TranslateParameterTemplates(string language)
+        {
+            if (String.IsNullOrEmpty(language))
+            {
+                return;
+            }
+
+            var bytes = (byte[])Resources.ResourceManager.GetObject("Dictionary");
+            using var stream = new MemoryStream(bytes, writable: false);
+            language = language.ToUpperInvariant();
+            using var dictionaryLoader = new DictionaryLoader(stream, language) { IncludeFile = "parameter.xml" };
+            if (language == dictionaryLoader.OriginalLanguage)
+            {
+                return;
+            }
+            dictionaryLoader.Load();
+            foreach (var parameter in _parameterTemplates)
+            {
+                if (dictionaryLoader.Dictionary.TryGetValue(parameter.Name, out var translated))
+                {
+                    parameter.Name = translated;
+                }
+
+                if (parameter is ListParameterDescriptor listDescriptor)
+                {
+                    var localizedOptions = new Dictionary<string, string>();
+                    foreach (var (k, v) in listDescriptor.Options)
+                    {
+                        if (!dictionaryLoader.Dictionary.TryGetValue(v, out var translatedValue))
+                        {
+                            translatedValue = v;
+                        }
+                        localizedOptions.Add(k, translatedValue);
+                    }
+                    listDescriptor.LocalizedOptions = localizedOptions;
+                }
             }
         }
 
@@ -443,7 +483,7 @@ namespace ism7mqtt
                     if (listDescriptor.Options.Any())
                     {
                         var key = value.ToString();
-                        var text = listDescriptor.Options.Where(x => x.Key == key).Select(x => x.Value).FirstOrDefault();
+                        var text = (listDescriptor.LocalizedOptions ?? listDescriptor.Options).Where(x => x.Key == key).Select(x => x.Value).FirstOrDefault();
                         if (!String.IsNullOrEmpty(text))
                         {
                             value = new JsonObject
